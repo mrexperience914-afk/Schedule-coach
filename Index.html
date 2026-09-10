@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Masaar — Schedule Discipline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <header class="hero">
+    <div class="hero-time">
+      <span id="clock">--:--</span>
+      <span id="clock-date">—</span>
+    </div>
+    <h1>Masaar</h1>
+    <p class="hero-sub">Your day has a shape. Hold it.</p>
+  </header>
+
+  <section class="checkin" id="checkin-panel">
+    <div class="checkin-head">
+      <h2>Today's check-in</h2>
+      <span class="checkin-status" id="checkin-status">Not confirmed</span>
+    </div>
+
+    <div class="field-row">
+      <label>Which day is this?</label>
+      <div class="variant-pick" id="variant-pick">
+        <button data-variant="regular" class="chip">Regular · Mon–Thu, Sat</button>
+        <button data-variant="friday" class="chip">Friday</button>
+        <button data-variant="sunday" class="chip">Sunday</button>
+      </div>
+    </div>
+
+    <div class="field-row goals-row">
+      <label>Set your goal for each Revision Block</label>
+      <div class="goal-inputs">
+        <div class="goal-field">
+          <span class="goal-tag">Block 1 · 06:20</span>
+          <input type="text" id="goal-block1" placeholder="What gets reviewed?" />
+        </div>
+        <div class="goal-field">
+          <span class="goal-tag">Block 2 · post-Maghrib</span>
+          <input type="text" id="goal-block2" placeholder="What gets reviewed?" />
+        </div>
+        <div class="goal-field">
+          <span class="goal-tag">Block 3 · 21:30</span>
+          <input type="text" id="goal-block3" placeholder="What gets reviewed?" />
+        </div>
+      </div>
+    </div>
+
+    <button class="confirm-btn" id="confirm-checkin">Confirm today's plan</button>
+  </section>
+
+  <section class="timeline-wrap">
+    <div class="timeline-head">
+      <h2>Timeline</h2>
+      <span id="variant-label" class="variant-label">—</span>
+    </div>
+    <ol class="timeline" id="timeline"></ol>
+  </section>
+
+  <section class="friction" id="friction-panel">
+    <h2>Report a slip</h2>
+    <p class="friction-sub">Behind schedule? Log it here — minutes get pulled from buffers, never from prayer, sleep, or class.</p>
+    <div class="friction-form">
+      <select id="friction-block"></select>
+      <input type="number" id="friction-minutes" min="1" max="240" placeholder="Minutes lost" />
+      <input type="text" id="friction-reason" placeholder="What caused it? (optional)" />
+      <button id="log-friction">Log slip &amp; reallocate</button>
+    </div>
+    <div id="friction-log" class="friction-log"></div>
+  </section>
+
+  <section class="ledger">
+    <h2>Recent days</h2>
+    <div id="ledger-list" class="ledger-list"></div>
+  </section>
+
+  <footer class="footer">
+    <span id="sync-status">Storage: local only</span>
+  </footer>
+
+</div>
+
+<script type="module" src="js/firebase-config.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
+:root {
+  --bg: #10191F;
+  --surface: #1A2530;
+  --surface-raised: #202D3A;
+  --line: #2C3A47;
+  --text: #E9E3D6;
+  --text-dim: #8CA0AA;
+  --gold: #C6923F;
+  --gold-soft: rgba(198, 146, 63, 0.14);
+  --teal: #4C8577;
+  --teal-soft: rgba(76, 133, 119, 0.16);
+  --clay: #B5502F;
+  --clay-soft: rgba(181, 80, 47, 0.16);
+  --radius: 3px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(198,146,63,0.07), transparent 60%);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  line-height: 1.5;
+}
+
+h1, h2 {
+  font-family: 'Zilla Slab', serif;
+  margin: 0;
+  font-weight: 600;
+}
+
+#app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+
+/* HERO */
+.hero {
+  padding: 28px 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.hero-time {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Zilla Slab', serif;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+#clock { font-size: 28px; font-weight: 600; letter-spacing: 0.5px; }
+#clock-date { font-size: 13px; color: var(--text-dim); font-family: 'IBM Plex Sans', sans-serif; }
+.hero h1 { font-size: 34px; letter-spacing: 0.5px; }
+.hero-sub { color: var(--text-dim); margin: 4px 0 0; font-size: 14.5px; }
+
+/* CHECKIN */
+.checkin {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 18px 20px;
+  margin-top: 20px;
+}
+.checkin-head { display: flex; justify-content: space-between; align-items: center; }
+.checkin-head h2 { font-size: 18px; }
+.checkin-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+.checkin-status.confirmed { color: var(--teal); border-color: var(--teal); }
+
+.field-row { margin-top: 16px; }
+.field-row label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.variant-pick { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.chip:hover { border-color: var(--gold); color: var(--text); }
+.chip.active {
+  background: var(--gold-soft);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.goal-inputs { display: flex; flex-direction: column; gap: 8px; }
+.goal-field { display: flex; align-items: center; gap: 10px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; }
+.goal-tag { font-size: 11.5px; color: var(--gold); white-space: nowrap; width: 128px; flex-shrink: 0; }
+.goal-field input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 6px 2px;
+}
+.goal-field input:focus { outline: none; }
+
+.confirm-btn {
+  margin-top: 18px;
+  width: 100%;
+  background: var(--gold);
+  color: #1A1206;
+  border: none;
+  padding: 12px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14.5px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.confirm-btn:hover { filter: brightness(1.08); }
+
+/* TIMELINE */
+.timeline-wrap { margin-top: 32px; }
+.timeline-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+.timeline-head h2 { font-size: 20px; }
+.variant-label { font-size: 12.5px; color: var(--text-dim); text-transform: none; }
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 2px solid var(--line);
+  padding-left: 20px;
+}
+
+.slot {
+  position: relative;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.slot:last-child { border-bottom: none; }
+.slot::before {
+  content: '';
+  position: absolute;
+  left: -25px;
+  top: 18px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.slot.done::before { background: var(--teal); }
+.slot.now::before { background: var(--gold); box-shadow: 0 0 0 4px var(--gold-soft); }
+
+.slot.now {
+  background: var(--gold-soft);
+  margin: 0 -14px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border-bottom: none;
+}
+
+.slot-row { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.slot-time { font-family: 'Zilla Slab', serif; font-size: 14px; color: var(--gold); white-space: nowrap; }
+.slot-label { font-weight: 600; font-size: 15px; }
+.slot-focus { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+
+.slot.revision .slot-label::after {
+  content: 'Revision Block';
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--teal);
+  border: 1px solid var(--teal);
+  border-radius: 20px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+.slot.prayer .slot-label { color: var(--gold); }
+
+.slot-goal {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border-left: 2px solid var(--teal);
+  padding: 6px 10px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.slot-shift {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--clay);
+}
+
+/* FRICTION */
+.friction {
+  margin-top: 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.friction h2 { font-size: 18px; }
+.friction-sub { font-size: 13px; color: var(--text-dim); margin: 6px 0 14px; }
+.friction-form { display: flex; flex-direction: column; gap: 8px; }
+.friction-form select, .friction-form input {
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 14px;
+}
+#log-friction {
+  background: var(--clay);
+  color: #FBEFE9;
+  border: none;
+  padding: 11px;
+  font-weight: 600;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+}
+#log-friction:hover { filter: brightness(1.08); }
+
+.friction-log { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.friction-entry {
+  font-size: 13px;
+  border-left: 2px solid var(--clay);
+  background: var(--clay-soft);
+  padding: 8px 10px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.friction-entry b { color: var(--clay); }
+
+/* LEDGER */
+.ledger { margin-top: 32px; }
+.ledger h2 { font-size: 18px; margin-bottom: 12px; }
+.ledger-list { display: flex; flex-direction: column; gap: 6px; }
+.ledger-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.ledger-row .ld-date { color: var(--text-dim); }
+.ledger-row .ld-status.clean { color: var(--teal); }
+.ledger-row .ld-status.slipped { color: var(--clay); }
+.ledger-empty { color: var(--text-dim); font-size: 13px; }
+
+.footer {
+  margin-top: 36px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+// ---------------------------------------------------------------
+// Firebase connection point.
+//
+// This app works fully offline with localStorage — you don't need
+// Firebase to use it. Fill this in only when you want your check-ins,
+// goals, and friction log to sync across devices (e.g. phone + laptop).
+//
+// How to enable it:
+// 1. Create a project at https://console.firebase.google.com
+// 2. Add a Web App inside that project, copy the config object it
+//    gives you, and paste the values below.
+// 3. In the Firebase console, enable Firestore Database (start in
+//    test mode while you're the only user, then lock it down with
+//    rules before sharing this app with anyone else).
+// 4. Reload the app — the footer will switch from
+//    "Storage: local only" to "Storage: synced".
+//
+// Leave any value as an empty string and the app will silently skip
+// Firebase and keep using localStorage only.
+// ---------------------------------------------------------------
+
+export const firebaseConfig = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+export const firebaseEnabled = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+import { firebaseConfig, firebaseEnabled } from './firebase-config.js';
+
+/* ----------------------------------------------------------------
+   SCHEDULE DATA
+   type: prayer | revision | class | meal | buffer | sleep | other
+   Blocks typed "buffer" are the only ones friction reallocation may
+   shrink. prayer / sleep / class / revision are never touched.
+------------------------------------------------------------------- */
+
+const SCHEDULES = {
+  regular: [
+    { id: 'fajr',        start: '05:00', end: '05:40', label: 'Fajr Namaz', focus: 'Morning prayer & initial preparation', type: 'prayer' },
+    { id: 'sada',         start: '05:40', end: '05:50', label: 'Sada-e-Madina', focus: 'Spiritual activity', type: 'other' },
+    { id: 'dhikr',        start: '05:50', end: '06:20', label: 'Namaz / Dhikr', focus: 'Extended prayer & contemplation', type: 'prayer' },
+    { id: 'block1',       start: '06:20', end: '06:40', label: 'Academic Revision', focus: 'High-intensity review', type: 'revision' },
+    { id: 'exercise',     start: '06:40', end: '07:00', label: 'Exercise / Physical Warm-up', focus: 'Mobility & energy activation', type: 'other' },
+    { id: 'class',        start: '07:00', end: '13:05', label: 'Core Academic Class (MA)', focus: 'Focused lecture attendance', type: 'class' },
+    { id: 'meal1',        start: '13:05', end: '13:30', label: 'Meal & Reset', focus: 'Nutrition and mental recharge', type: 'meal' },
+    { id: 'tuition',      start: '13:30', end: '16:00', label: 'Tuition Session', focus: 'Teaching / study commitment', type: 'class' },
+    { id: 'decompress',   start: '16:00', end: '16:20', label: 'Decompress & Active Reading', focus: 'Light reading & transition', type: 'buffer' },
+    { id: 'preAsr',       start: '16:20', end: '17:10', label: 'Pre-Asr Study Buffer', focus: 'Reading / assignment prep', type: 'buffer' },
+    { id: 'asr',          start: '17:10', end: '17:35', label: 'Asr Namaz', focus: 'Prayer window', type: 'prayer' },
+    { id: 'tea',          start: '17:35', end: '18:00', label: 'Tea, Reading & Deeni Work', focus: 'Light refreshment & religious study', type: 'buffer' },
+    { id: 'maghrib',      start: '18:00', end: '18:20', label: 'Maghrib Namaz & Reset', focus: 'Prayer & brief break', type: 'prayer' },
+    { id: 'block2',       start: '18:20', end: '20:00', label: 'Core Academic Revision', focus: 'Deep work study session', type: 'revision' },
+    { id: 'dinner',       start: '20:00', end: '20:30', label: 'Dinner', focus: 'Evening meal', type: 'meal' },
+    { id: 'isha',         start: '20:30', end: '21:20', label: 'Isha Namaz', focus: 'Night prayer & reflection', type: 'prayer' },
+    { id: 'deskTrans',    start: '21:20', end: '21:30', label: 'Desk Transition', focus: 'Prepare materials for final review', type: 'buffer' },
+    { id: 'block3',       start: '21:30', end: '23:30', label: 'Late Academic Revision', focus: 'Deep retention study', type: 'revision' },
+    { id: 'windDown',     start: '23:30', end: '00:00', label: 'Night Wind-Down', focus: 'Fresh up, journal, prepare for sleep', type: 'buffer' },
+    { id: 'sleep',        start: '00:00', end: '05:00', label: 'Sleep', focus: '5 hours core rest', type: 'sleep' },
+  ],
+
+  friday: [
+    { id: 'fajr',        start: '05:00', end: '05:40', label: 'Fajr Namaz', focus: 'Morning prayer & initial preparation', type: 'prayer' },
+    { id: 'sada',         start: '05:40', end: '05:50', label: 'Sada-e-Madina', focus: 'Spiritual activity', type: 'other' },
+    { id: 'dhikr',        start: '05:50', end: '06:20', label: 'Namaz / Dhikr', focus: 'Extended prayer & contemplation', type: 'prayer' },
+    { id: 'block1',       start: '06:20', end: '06:40', label: 'Academic Revision', focus: 'High-intensity review', type: 'revision' },
+    { id: 'exercise',     start: '06:40', end: '07:00', label: 'Exercise / Physical Warm-up', focus: 'Mobility & energy activation', type: 'other' },
+    { id: 'class',        start: '07:00', end: '13:05', label: 'Core Academic Class (MA)', focus: 'Focused lecture attendance', type: 'class' },
+    { id: 'meal1',        start: '13:05', end: '13:30', label: 'Meal & Reset', focus: 'Nutrition and mental recharge', type: 'meal' },
+    { id: 'tuition',      start: '13:30', end: '16:30', label: 'Tuition Session', focus: 'Extends later on Fridays', type: 'class' },
+    { id: 'preAsr',       start: '16:30', end: '17:10', label: 'Pre-Asr Study Buffer', focus: 'Decompression merged directly into Asr prep', type: 'buffer' },
+    { id: 'asr',          start: '17:10', end: '17:35', label: 'Asr Namaz', focus: 'Prayer window', type: 'prayer' },
+    { id: 'tea',          start: '17:35', end: '18:00', label: 'Tea, Reading & Deeni Work', focus: 'Light refreshment & religious study', type: 'buffer' },
+    { id: 'maghrib',      start: '18:00', end: '18:20', label: 'Maghrib Namaz & Reset', focus: 'Prayer & brief break', type: 'prayer' },
+    { id: 'block2',       start: '18:20', end: '20:00', label: 'Core Academic Revision', focus: 'Deep work study session', type: 'revision' },
+    { id: 'dinner',       start: '20:00', end: '20:30', label: 'Dinner', focus: 'Evening meal', type: 'meal' },
+    { id: 'isha',         start: '20:30', end: '21:20', label: 'Isha Namaz', focus: 'Night prayer & reflection', type: 'prayer' },
+    { id: 'deskTrans',    start: '21:20', end: '21:30', label: 'Desk Transition', focus: 'Prepare materials for final review', type: 'buffer' },
+    { id: 'block3',       start: '21:30', end: '23:30', label: 'Late Academic Revision', focus: 'Deep retention study', type: 'revision' },
+    { id: 'windDown',     start: '23:30', end: '00:00', label: 'Night Wind-Down', focus: 'Fresh up, journal, prepare for sleep', type: 'buffer' },
+    { id: 'sleep',        start: '00:00', end: '05:00', label: 'Sleep', focus: '5 hours core rest', type: 'sleep' },
+  ],
+
+  sunday: [
+    { id: 'fajr',        start: '05:00', end: '05:40', label: 'Fajr Namaz', focus: 'Morning prayer & initial preparation', type: 'prayer' },
+    { id: 'sada',         start: '05:40', end: '05:50', label: 'Sada-e-Madina', focus: 'Spiritual activity', type: 'other' },
+    { id: 'dhikr',        start: '05:50', end: '06:20', label: 'Namaz / Dhikr', focus: 'Extended prayer & contemplation', type: 'prayer' },
+    { id: 'freeMorning',  start: '06:20', end: '10:00', label: 'Free Block · Recuperation', focus: 'Flexible exercise & rest — post-Fajr window', type: 'buffer' },
+    { id: 'class',        start: '10:00', end: '13:00', label: 'Core Academic Class (MA)', focus: 'Shifted later on Sundays', type: 'class' },
+    { id: 'meal1',        start: '13:00', end: '13:30', label: 'Meal & Reset', focus: 'Nutrition and mental recharge', type: 'meal' },
+    { id: 'open',         start: '13:30', end: '14:00', label: 'Open Block', focus: 'Unscheduled — admin or rest', type: 'buffer' },
+    { id: 'freeAfternoon',start: '14:00', end: '15:30', label: 'Free Block · Recuperation', focus: 'Flexible exercise & rest', type: 'buffer' },
+    { id: 'preAsr',       start: '15:30', end: '17:10', label: 'Pre-Asr Study Buffer', focus: 'Reading / assignment prep (assumed continuation)', type: 'buffer' },
+    { id: 'asr',          start: '17:10', end: '17:35', label: 'Asr Namaz', focus: 'Prayer window', type: 'prayer' },
+    { id: 'tea',          start: '17:35', end: '18:00', label: 'Tea, Reading & Deeni Work', focus: 'Light refreshment & religious study', type: 'buffer' },
+    { id: 'maghrib',      start: '18:00', end: '18:20', label: 'Maghrib Namaz & Reset', focus: 'Prayer & brief break', type: 'prayer' },
+    { id: 'block2',       start: '18:20', end: '20:00', label: 'Core Academic Revision', focus: 'Deep work study session', type: 'revision' },
+    { id: 'dinner',       start: '20:00', end: '20:30', label: 'Dinner', focus: 'Evening meal', type: 'meal' },
+    { id: 'isha',         start: '20:30', end: '21:20', label: 'Isha Namaz', focus: 'Night prayer & reflection', type: 'prayer' },
+    { id: 'deskTrans',    start: '21:20', end: '21:30', label: 'Desk Transition', focus: 'Prepare materials for final review', type: 'buffer' },
+    { id: 'block3',       start: '21:30', end: '23:30', label: 'Late Academic Revision', focus: 'Deep retention study', type: 'revision' },
+    { id: 'windDown',     start: '23:30', end: '00:00', label: 'Night Wind-Down', focus: 'Fresh up, journal, prepare for sleep', type: 'buffer' },
+    { id: 'sleep',        start: '00:00', end: '05:00', label: 'Sleep', focus: '5 hours core rest', type: 'sleep' },
+  ],
+};
+
+// Priority order for absorbing lost minutes, and the floor (minutes)
+// each buffer block may never be reduced below.
+const BUFFER_PRIORITY = [
+  { id: 'decompress', floor: 0 },
+  { id: 'open',       floor: 0 },
+  { id: 'freeAfternoon', floor: 15 },
+  { id: 'tea',         floor: 10 },
+  { id: 'deskTrans',   floor: 3 },
+  { id: 'preAsr',      floor: 20 },
+  { id: 'windDown',    floor: 15 },
+];
+
+const VARIANT_LABELS = { regular: 'Regular · Mon–Thu, Sat', friday: 'Friday', sunday: 'Sunday' };
+
+/* ---------------------------------------------------------------- */
+
+function todayKey(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+function detectDefaultVariant() {
+  const day = new Date().getDay(); // 0 = Sunday, 5 = Friday
+  if (day === 0) return 'sunday';
+  if (day === 5) return 'friday';
+  return 'regular';
+}
+
+function minutesOf(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function fmtHHMM(mins) {
+  mins = ((mins % 1440) + 1440) % 1440;
+  const h = Math.floor(mins / 60).toString().padStart(2, '0');
+  const m = (mins % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function nowMinutes() {
+  const n = new Date();
+  return n.getHours() * 60 + n.getMinutes();
+}
+
+/* ---------------------------------------------------------------- */
+
+class Store {
+  constructor() {
+    this.local = window.localStorage;
+    this.fbReady = false;
+    if (firebaseEnabled) this.initFirebase();
+  }
+
+  async initFirebase() {
+    try {
+      const [{ initializeApp }, { getFirestore, doc, getDoc, setDoc }] = await Promise.all([
+        import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'),
+        import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'),
+      ]);
+      const app = initializeApp(firebaseConfig);
+      this.db = getFirestore(app);
+      this._doc = doc; this._getDoc = getDoc; this._setDoc = setDoc;
+      this.fbReady = true;
+      document.getElementById('sync-status').textContent = 'Storage: synced';
+    } catch (e) {
+      console.warn('Firebase unavailable, staying on localStorage.', e);
+      this.fbReady = false;
+    }
+  }
+
+  getDay(key) {
+    const raw = this.local.getItem('day:' + key);
+    return raw ? JSON.parse(raw) : { variant: null, goals: {}, confirmed: false, friction: [] };
+  }
+
+  async saveDay(key, data) {
+    this.local.setItem('day:' + key, JSON.stringify(data));
+    if (this.fbReady) {
+      try {
+        await this._setDoc(this._doc(this.db, 'days', key), data);
+      } catch (e) {
+        console.warn('Firebase write failed, kept locally.', e);
+      }
+    }
+  }
+
+  recentDays(n = 7) {
+    const out = [];
+    for (let i = 0; i < 400 && out.length < n; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = todayKey(d);
+      const raw = this.local.getItem('day:' + key);
+      if (raw) out.push({ key, ...JSON.parse(raw) });
+    }
+    return out;
+  }
+}
+
+const store = new Store();
+
+/* ---------------------------------------------------------------- */
+
+let state = {
+  variant: detectDefaultVariant(),
+  day: null,
+};
+
+function loadToday() {
+  const key = todayKey();
+  state.day = store.getDay(key);
+  if (state.day.variant) state.variant = state.day.variant;
+}
+
+function persist() {
+  store.saveDay(todayKey(), state.day);
+}
+
+/* ---- check-in panel ---- */
+
+function renderCheckin() {
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.classList.toggle('active', chip.dataset.variant === state.variant);
+  });
+  document.getElementById('goal-block1').value = state.day.goals.block1 || '';
+  document.getElementById('goal-block2').value = state.day.goals.block2 || '';
+  document.getElementById('goal-block3').value = state.day.goals.block3 || '';
+
+  const block1Field = document.getElementById('goal-block1').closest('.goal-field');
+  block1Field.style.display = state.variant === 'sunday' ? 'none' : 'flex';
+
+  const status = document.getElementById('checkin-status');
+  if (state.day.confirmed) {
+    status.textContent = 'Confirmed';
+    status.classList.add('confirmed');
+  } else {
+    status.textContent = 'Not confirmed';
+    status.classList.remove('confirmed');
+  }
+}
+
+document.getElementById('variant-pick').addEventListener('click', (e) => {
+  const btn = e.target.closest('.chip');
+  if (!btn) return;
+  state.variant = btn.dataset.variant;
+  renderCheckin();
+  renderTimeline();
+  populateFrictionSelect();
+});
+
+document.getElementById('confirm-checkin').addEventListener('click', () => {
+  state.day.variant = state.variant;
+  state.day.goals = {
+    block1: document.getElementById('goal-block1').value.trim(),
+    block2: document.getElementById('goal-block2').value.trim(),
+    block3: document.getElementById('goal-block3').value.trim(),
+  };
+  state.day.confirmed = true;
+  persist();
+  renderCheckin();
+  renderTimeline();
+});
+
+/* ---- timeline ---- */
+
+function computeShifts() {
+  // Total minutes lost today
+  const totalLost = (state.day.friction || []).reduce((s, f) => s + f.minutes, 0);
+  const shifts = {}; // id -> minutes removed from this block
+  let remaining = totalLost;
+  for (const b of BUFFER_PRIORITY) {
+    if (remaining <= 0) break;
+    const block = (SCHEDULES[state.variant] || []).find(s => s.id === b.id);
+    if (!block) continue;
+    const dur = minutesOf(block.end) - minutesOf(block.start);
+    const reducible = Math.max(0, dur - b.floor);
+    const take = Math.min(reducible, remaining);
+    if (take > 0) {
+      shifts[b.id] = take;
+      remaining -= take;
+    }
+  }
+  return { shifts, unabsorbed: remaining, totalLost };
+}
+
+function renderTimeline() {
+  const list = SCHEDULES[state.variant];
+  const timeline = document.getElementById('timeline');
+  document.getElementById('variant-label').textContent = VARIANT_LABELS[state.variant];
+  timeline.innerHTML = '';
+
+  const now = nowMinutes();
+  const { shifts } = computeShifts();
+
+  list.forEach(slot => {
+    let start = minutesOf(slot.start);
+    let end = minutesOf(slot.end);
+    if (end <= start) end += 1440; // crosses midnight (sleep)
+
+    const shiftMin = shifts[slot.id] || 0;
+    const shiftedEnd = end - shiftMin;
+
+    const li = document.createElement('li');
+    li.className = 'slot';
+    if (slot.type === 'revision') li.classList.add('revision');
+    if (slot.type === 'prayer') li.classList.add('prayer');
+
+    const nowAdj = now < start ? now + 1440 : now;
+    if (nowAdj >= start && nowAdj < shiftedEnd) li.classList.add('now');
+    else if (nowAdj >= shiftedEnd) li.classList.add('done');
+
+    const goal = slot.id === 'block1' ? state.day.goals?.block1
+      : slot.id === 'block2' ? state.day.goals?.block2
+      : slot.id === 'block3' ? state.day.goals?.block3
+      : null;
+
+    li.innerHTML = `
+      <div class="slot-row">
+        <span class="slot-label">${slot.label}</span>
+        <span class="slot-time">${slot.start}–${shiftMin > 0 ? fmtHHMM(shiftedEnd) : slot.end}</span>
+      </div>
+      <div class="slot-focus">${slot.focus}</div>
+      ${goal ? `<div class="slot-goal">${escapeHTML(goal)}</div>` : ''}
+      ${shiftMin > 0 ? `<div class="slot-shift">Compressed by ${shiftMin} min to absorb today's slip</div>` : ''}
+    `;
+    timeline.appendChild(li);
+  });
+}
+
+function escapeHTML(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ---- friction ---- */
+
+function populateFrictionSelect() {
+  const sel = document.getElementById('friction-block');
+  sel.innerHTML = '';
+  SCHEDULES[state.variant].forEach(slot => {
+    const opt = document.createElement('option');
+    opt.value = slot.id;
+    opt.textContent = `${slot.start} — ${slot.label}`;
+    sel.appendChild(opt);
+  });
+}
+
+function renderFrictionLog() {
+  const wrap = document.getElementById('friction-log');
+  const entries = state.day.friction || [];
+  if (!entries.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = entries.map(f => {
+    const block = SCHEDULES[state.variant].find(s => s.id === f.block);
+    return `<div class="friction-entry"><b>${f.minutes} min</b> lost at ${block ? block.label : f.block}${f.reason ? ' — ' + escapeHTML(f.reason) : ''}</div>`;
+  }).join('');
+
+  const { unabsorbed, totalLost } = computeShifts();
+  if (unabsorbed > 0) {
+    wrap.innerHTML += `<div class="friction-entry" style="border-color:#B5502F"><b>${unabsorbed} min unaccounted.</b> Buffers are exhausted for today — no more slack to pull from without touching prayer, sleep, or a Revision Block. Tighten the next transition yourself.</div>`;
+  } else if (totalLost > 0) {
+    wrap.innerHTML += `<div class="friction-entry"><b>All ${totalLost} min absorbed</b> from buffer blocks. Prayer, sleep, and every Revision Block stayed intact.</div>`;
+  }
+}
+
+document.getElementById('log-friction').addEventListener('click', () => {
+  const block = document.getElementById('friction-block').value;
+  const minutes = parseInt(document.getElementById('friction-minutes').value, 10);
+  const reason = document.getElementById('friction-reason').value.trim();
+  if (!minutes || minutes <= 0) return;
+  state.day.friction = state.day.friction || [];
+  state.day.friction.push({ block, minutes, reason, loggedAt: new Date().toISOString() });
+  persist();
+  document.getElementById('friction-minutes').value = '';
+  document.getElementById('friction-reason').value = '';
+  renderTimeline();
+  renderFrictionLog();
+});
+
+/* ---- ledger ---- */
+
+function renderLedger() {
+  const wrap = document.getElementById('ledger-list');
+  const days = store.recentDays(7).filter(d => d.key !== todayKey());
+  if (!days.length) {
+    wrap.innerHTML = '<div class="ledger-empty">Nothing logged yet — confirm today\'s plan to start the record.</div>';
+    return;
+  }
+  wrap.innerHTML = days.map(d => {
+    const lost = (d.friction || []).reduce((s, f) => s + f.minutes, 0);
+    const clean = lost === 0;
+    return `<div class="ledger-row">
+      <span class="ld-date">${d.key}${d.variant ? ' · ' + VARIANT_LABELS[d.variant] : ''}</span>
+      <span class="ld-status ${clean ? 'clean' : 'slipped'}">${clean ? 'On track' : lost + ' min lost'}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ---- clock ---- */
+
+function tickClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('clock-date').textContent = n.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  renderTimeline(); // keep now/done markers live
+}
+
+/* ---- boot ---- */
+
+function boot() {
+  loadToday();
+  renderCheckin();
+  populateFrictionSelect();
+  # Masaar — Schedule Discipline
+
+A daily accountability app for the Regular / Friday / Sunday routine: confirm
+today's variant, set goals for the three Revision Blocks, watch the live
+timeline, and log slips so lost minutes get pulled from buffer time only —
+never from prayer, sleep, class, or a Revision Block.
+
+Runs as a static site. No build step. Works offline on localStorage; add
+Firebase if you want it to sync across your phone and laptop.
+
+## Run it locally
+
+Any static file server works, e.g.:
+
+```bash
+cd schedule-coach
+python3 -m http.server 8000
+  renderTimeline();
+  renderFrictionLog();
+  renderLedger();
+  tickClock();
+  setInterval(tickClock, 30000);
+}
+
+boot();
